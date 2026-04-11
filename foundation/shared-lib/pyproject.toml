@@ -1,0 +1,20 @@
+[project]
+name = "starpalace-shared"
+version = "0.1.0"
+description = "星宫跨项目共享库 — 解决8个项目重复出现相同Bug"
+requires-python = ">=3.10"
+dependencies = [
+    "PyJWT>=2.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+fastapi = ["fastapi>=0.100"]
+all = ["fastapi>=0.100"]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.setuptools.packages.find]
+include = ["starpalace_shared*"]

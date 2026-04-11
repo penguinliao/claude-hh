@@ -1,0 +1,55 @@
+# Harness Engineering — 统一工具配置
+# 复制到任何Python项目的pyproject.toml中即可使用
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E", "W",      # pycodestyle
+    "F",            # pyflakes
+    "I",            # isort
+    "N",            # pep8-naming
+    "UP",           # pyupgrade
+    "B",            # flake8-bugbear（常见Bug模式）
+    "S",            # bandit安全规则
+    "A",            # flake8-builtins
+    "C90",          # McCabe复杂度
+    "SIM",          # flake8-simplify
+    "T20",          # flake8-print（禁止print，用logger）
+    "RUF",          # ruff专有规则
+    "PTH",          # pathlib优先
+]
+ignore = [
+    "S101",         # 允许assert（测试中常用）
+    "E501",         # 行长度由formatter处理
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S106", "T20"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-x --tb=short -q"
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+severity = "medium"

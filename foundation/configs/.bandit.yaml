@@ -1,0 +1,13 @@
+# Harness Engineering — Bandit安全扫描配置
+# 47个Python安全检查项
+
+skips:
+  - B101  # assert（测试中需要）
+
+exclude_dirs:
+  - tests
+  - .venv
+  - venv
+
+severity: medium
+confidence: medium
