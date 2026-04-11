@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  shellcheck:
+    name: Shellcheck install.sh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run shellcheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck install.sh || true   # Warn but don't block v0.1 — tighten later
+      - name: Syntax check
+        run: bash -n install.sh
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy bandit detect-secrets radon
+          pip install -e .
+
+      - name: Import smoke test
+        run: |
+          python -c "from harness.runner import check_quick, check_standard, check_full; print('import OK')"
+          python -c "from harness.pipeline import get_state; print('pipeline OK')"
+          python -c "from harness.health import check_health; print('health OK')"
+
+      - name: Run check() type guard regression test
+        run: |
+          python -c "
+          from harness import check
+          try:
+              check('single_file.py', mode='quick')
+              raise SystemExit('FAIL: should have raised TypeError')
+          except TypeError as e:
+              print('PASS:', e)
+          "
+
+      - name: Run health check
+        run: |
+          python -c "
+          from harness.health import check_health
+          report = check_health()
+          print(report.summary())
+          "
+
+      - name: Ruff self-check
+        run: ruff check harness/ hooks/ bin/ || true   # Warn-only for v0.1
+
+  installer:
+    name: Installer dry-run (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check
+        run: bash -n install.sh
+
+      - name: Run installer in local-dev mode
+        env:
+          HARNESS_LOCAL_DEV: '1'
+        run: |
+          # Dry-run the installer against a fake home to avoid mutating CI runner
+          export HOME=$RUNNER_TEMP/fakehome
+          mkdir -p "$HOME/.claude"
+          echo '{}' > "$HOME/.claude/settings.json"
+          # Claude Code is not installed in CI — expect the installer to fail at step [1/7]
+          # with a clear error message. This validates the environment-check path.
+          if bash install.sh </dev/null 2>&1 | tee install.log | grep -q "未检测到 Claude Code"; then
+              echo "✅ Installer correctly detects missing Claude Code"
+              exit 0
+          else
+              echo "❌ Installer did not produce expected error"
+              cat install.log
+              exit 1
+          fi
