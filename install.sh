@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Claude Rails — 一行命令安装脚本
-# 用法: curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-rails/main/install.sh | bash
-# 本地测试: HARNESS_LOCAL_DEV=1 bash install.sh
+# Claude Rails — one-line installer / 一行命令安装脚本
+# Usage / 用法:
+#   curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-rails/main/install.sh | bash
+# Local dev / 本地测试:
+#   HARNESS_LOCAL_DEV=1 bash install.sh
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────
@@ -56,30 +58,43 @@ show_banner() {
     printf "\n"
     bold "╔════════════════════════════════════════════════════════╗"
     bold "║              Claude Rails 🚂                           ║"
-    bold "║   Rails for Claude Code — 给 AI 编程铺一条轨道         ║"
-    bold "║  让代码准确率从 50% 提升到 80%+                        ║"
+    bold "║   Rails for Claude Code — put AI on a track            ║"
+    bold "║   给 AI 编程铺一条轨道                                 ║"
+    bold "║   Turn code accuracy from 50% to 80%+                  ║"
+    bold "║   让代码准确率从 50% 提升到 80%+                       ║"
     bold "╚════════════════════════════════════════════════════════╝"
     printf "\n"
 
-    bold "═══ 你将得到 ═══"
-    success "  ✅ 代码准确率 50% → 80%+（基于 367 项真实 bug 数据）"
-    success "  ✅ 安全漏洞自动拦截（10 条铁律硬门禁）"
-    success "  ✅ AI 先写规格再写代码，规格留存为文档"
-    success "  ✅ AI 无法绕过质量检查（hook 物理拦截，不是 prompt 承诺）"
+    bold "═══ What you get / 你将得到 ═══"
+    success "  ✅ Code accuracy 50% → 80%+ (based on 367 real bugs)"
+    success "     代码准确率 50% → 80%+（基于 367 项真实 bug 数据）"
+    success "  ✅ Security vulnerabilities auto-blocked (10 golden rules)"
+    success "     安全漏洞自动拦截（10 条铁律硬门禁）"
+    success "  ✅ AI writes a spec before code, kept as documentation"
+    success "     AI 先写规格再写代码，规格留存为文档"
+    success "  ✅ AI cannot bypass quality checks (hooks, not promises)"
+    success "     AI 无法绕过质量检查（hook 物理拦截，不是 prompt 承诺）"
     printf "\n"
 
-    bold "═══ 代价是什么 ═══"
-    warn "  ⚠️  Token 消耗 2-3 倍（每个功能走 5 个阶段）"
-    warn "  ⚠️  简单功能也要 5-10 分钟（适合生产代码，不适合 5 分钟原型）"
-    warn "  ⚠️  目前只支持 Python / TypeScript / Vue"
-    warn "  ⚠️  需要 Claude Code 环境（不支持 Cursor / Aider）"
+    bold "═══ The cost / 代价是什么 ═══"
+    warn "  ⚠️  Token usage 2-3x (every feature walks 5 stages)"
+    warn "      Token 消耗 2-3 倍（每个功能走 5 个阶段）"
+    warn "  ⚠️  5-15 min per feature (production code, not 5-min prototypes)"
+    warn "      简单功能也要 5-10 分钟（适合生产代码，不适合 5 分钟原型）"
+    warn "  ⚠️  Python / TypeScript / Vue only (for now)"
+    warn "      目前只支持 Python / TypeScript / Vue"
+    warn "  ⚠️  Requires Claude Code (no Cursor / Aider support)"
+    warn "      需要 Claude Code 环境（不支持 Cursor / Aider）"
     printf "\n"
 
-    bold "═══ 安装内容 ═══"
-    info "  📁 ~/.harness/             ← harness 核心（独立目录，好卸载）"
-    info "  🔧 ~/.claude/settings.json ← 合并 hook 配置（自动备份原文件）"
-    info "  📦 7 个质量工具            ← ruff / mypy / bandit / detect-secrets / radon / pre-commit / esbuild"
-    info "  🔗 ~/.local/bin/harness    ← CLI 命令"
+    bold "═══ What gets installed / 安装内容 ═══"
+    info "  📁 ~/.harness/             Core engine (standalone, easy uninstall)"
+    info "                             核心引擎（独立目录，好卸载）"
+    info "  🔧 ~/.claude/settings.json Merged hook config (auto-backup)"
+    info "                             合并 hook 配置（自动备份原文件）"
+    info "  📦 7 quality tools         ruff / mypy / bandit / detect-secrets / radon / pre-commit / esbuild"
+    info "                             7 个质量工具"
+    info "  🔗 ~/.local/bin/harness    CLI command / CLI 命令"
     printf "\n"
 }
 
@@ -87,12 +102,12 @@ show_banner() {
 # 第 2 步：二次确认（3 秒自动继续）
 # ─────────────────────────────────────────────────────────
 confirm_install() {
+    printf "${BOLD}Press Ctrl+C to cancel, continuing in 3 seconds...${RESET}\n"
     printf "${BOLD}按 Ctrl+C 取消，3 秒后自动继续...${RESET}\n\n"
-    # read -t 不在所有 bash 3.2 版本可靠，用 sleep + trap
-    # 允许用户提前按回车继续
-    if read -r -t 3 -p "继续？[Y/n] " CONFIRM 2>/dev/null; then
+    # read -t 不在所有 bash 3.2 版本可靠
+    if read -r -t 3 -p "Continue / 继续？[Y/n] " CONFIRM 2>/dev/null; then
         case "${CONFIRM:-Y}" in
-            [nN]*) error "已取消安装。"; exit 0 ;;
+            [nN]*) error "Cancelled / 已取消安装。"; exit 0 ;;
         esac
     else
         printf "\n"
@@ -314,24 +329,27 @@ HARNESS_CLI
 # ─────────────────────────────────────────────────────────
 show_done() {
     printf "\n"
-    success "✅ 安装完成！"
+    success "✅ Installation complete! / 安装完成！"
     printf "\n"
 
-    bold "═══ 下一步 ═══"
-    info "  1. cd 你的项目目录/"
-    info "  2. harness init             # 初始化 harness（每个项目做一次）"
-    info "  3. claude                   # 启动 Claude Code（必须普通模式，不带 --dangerously-skip-permissions）"
-    info "  4. 告诉 Claude：'开发 XX 功能'"
-    info "     → Claude 会自动走 5 个阶段：SPEC → DESIGN → IMPLEMENT → REVIEW → TEST"
+    bold "═══ Next steps / 下一步 ═══"
+    info "  1. cd your-project/   (cd 你的项目目录/)"
+    info "  2. harness init       (Initialize harness / 初始化 harness)"
+    info "  3. claude             (Start Claude Code / 启动 Claude Code)"
+    info "                         Use normal mode, NOT --dangerously-skip-permissions"
+    info "                         必须普通模式，不带 --dangerously-skip-permissions"
+    info "  4. Tell Claude: 'build feature X' / 告诉 Claude：'开发 XX 功能'"
+    info "     → Claude will walk through 5 stages:"
+    info "       SPEC → DESIGN → IMPLEMENT → REVIEW → TEST"
     printf "\n"
 
-    bold "═══ 卸载 ═══"
-    info "  harness uninstall     # 或手动：rm -rf ~/.harness"
+    bold "═══ Uninstall / 卸载 ═══"
+    info "  harness uninstall     (Or manually / 或手动: rm -rf ~/.harness)"
     printf "\n"
 
-    bold "═══ 文档 ═══"
+    bold "═══ Documentation / 文档 ═══"
     info "  https://github.com/$GITHUB_REPO"
-    info "  问题排查：harness doctor"
+    info "  Troubleshooting / 问题排查: harness doctor"
     printf "\n"
 }
 
