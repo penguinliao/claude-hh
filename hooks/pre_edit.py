@@ -38,47 +38,74 @@ def handle(ctx: HookContext) -> HookResult:
 
     # 保护 spec.md 和 review.md 只在对应阶段可编辑
     basename = _pl.Path(ctx.file_path).name if ctx.file_path else ""
-    if basename == "spec.md" and ".harness" in (ctx.file_path or ""):
-        if state and state.current_stage != 1:  # 只在 SPEC 阶段可写
-            return HookResult(exit_code=2, message="[harness] ❌ spec.md 只能在 SPEC 阶段(1)编辑")
-    if basename == "review.md" and ".harness" in (ctx.file_path or ""):
-        if state and state.current_stage != 4:  # 只在 REVIEW 阶段可写
-            return HookResult(exit_code=2, message="[harness] ❌ review.md 只能在 REVIEW 阶段(4)编辑")
+    if basename in ("spec.md", "review.md") and ctx.file_path:
+        file_parent = _pl.Path(ctx.file_path).resolve().parent.name
+        if file_parent == ".harness":
+            if basename == "spec.md" and state and state.current_stage != 1:
+                return HookResult(exit_code=2, message="[harness] ❌ spec.md 只能在 SPEC 阶段(1)编辑")
+            if basename == "review.md" and state and state.current_stage != 4:
+                return HookResult(exit_code=2, message="[harness] ❌ review.md 只能在 REVIEW 阶段(4)编辑")
 
     if state:
         stage_name = STAGE_NAMES.get(state.current_stage, "?")
 
         # v3.2: Spec-based scope check — block edits outside spec's file list
         if state.current_stage == 3 and ctx.file_path:
+            import pathlib as _pl
+
+            _CODE_EXTS = {".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".html", ".css",
+                          ".scss", ".svelte", ".go", ".rs", ".java", ".kt", ".swift"}
+
+            def _check_spec_scope(file_path: str, project_root: str) -> "HookResult | None":
+                """Check if file_path is in spec's affected files list.
+
+                Returns HookResult(exit_code=2) if blocked, None if allowed.
+                """
+                try:
+                    ext = _pl.Path(file_path).suffix.lower()
+                    if ext not in _CODE_EXTS:
+                        return None  # Non-code files always pass
+                    from harness.spec_file import find_spec, extract_affected_files
+                    spec_path = find_spec(project_root)
+                    if not spec_path:
+                        return None  # No spec → pass
+                    affected = extract_affected_files(spec_path)
+                    if not affected:
+                        return None  # Empty spec file list → pass
+                    norm = lambda p: os.path.normpath(p).replace(os.sep, "/")
+                    rel_path = os.path.relpath(file_path, project_root)
+                    if not any(norm(rel_path) == norm(af) for af in affected):
+                        _bname = os.path.basename(file_path)
+                        return HookResult(
+                            exit_code=2,
+                            message=f"[harness] ❌ {_bname} 不在spec.md影响文件列表中\n"
+                                    f"spec列出的文件：{', '.join(affected[:5])}\n"
+                                    f"如果确实需要修改，请先更新spec.md的影响文件部分",
+                        )
+                    return None
+                except Exception:
+                    return None  # Fail-open: spec parsing error should never block edits
+
             try:
-                import pathlib as _pl
                 # Harness-engineering self-edit exemption (can't lock itself out)
                 _harness_dir = str(_pl.Path(__file__).resolve().parent.parent)
-                if str(_pl.Path(ctx.file_path).resolve()).lower().startswith(_harness_dir.lower()):
-                    pass  # Skip spec scope check for harness-engineering itself
-                else:
-                    _ext = _pl.Path(ctx.file_path).suffix.lower()
-                    _CODE_EXTS = {".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".html", ".css",
-                                  ".scss", ".svelte", ".go", ".rs", ".java", ".kt", ".swift"}
-                    if _ext not in _CODE_EXTS:
-                        pass  # Non-code files always pass spec scope check
+                _file_resolved = str(_pl.Path(ctx.file_path).resolve()).lower()
+                if _file_resolved.startswith(_harness_dir.lower()):
+                    # Only exempt harness/ and hooks/ (core engine).
+                    # docs/examples/templates etc. still need to be in spec.
+                    _rel = os.path.relpath(ctx.file_path, _harness_dir)
+                    if _rel.startswith("harness" + os.sep) or _rel.startswith("hooks" + os.sep):
+                        pass  # Core engine files exempt from spec scope
                     else:
-                        from harness.spec_file import find_spec, extract_affected_files
-                        spec_path = find_spec(ctx.project_root)
-                        if spec_path:
-                            affected = extract_affected_files(spec_path)
-                            if affected:
-                                rel_path = os.path.relpath(ctx.file_path, ctx.project_root)
-                                basename = os.path.basename(ctx.file_path)
-                                if not any(basename in af or rel_path in af for af in affected):
-                                    return HookResult(
-                                        exit_code=2,
-                                        message=f"[harness] ❌ {basename} 不在spec.md影响文件列表中\n"
-                                                f"spec列出的文件：{', '.join(affected[:5])}\n"
-                                                f"如果确实需要修改，请先更新spec.md的影响文件部分",
-                                    )
+                        result = _check_spec_scope(ctx.file_path, ctx.project_root)
+                        if result is not None:
+                            return result
+                else:
+                    result = _check_spec_scope(ctx.file_path, ctx.project_root)
+                    if result is not None:
+                        return result
             except Exception:
-                pass  # Fail-open: spec parsing error should never block edits
+                pass  # Fail-open: path resolution error should never block edits
 
         return HookResult(exit_code=0, message=f"[harness] {fname} OK (Stage {state.current_stage} {stage_name})")
 

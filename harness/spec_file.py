@@ -209,6 +209,58 @@ def validate_spec(spec_path: str, route: str = "") -> SpecValidation:
     )
 
 
+def extract_acceptance_criteria(spec_path: str) -> list[str]:
+    """Extract individual acceptance criteria text from spec.md.
+
+    Returns a list of criterion strings (e.g., "当用户点击时，应该跳转").
+    Used by TEST stage to verify each AC has a corresponding test result.
+    """
+    try:
+        content = Path(spec_path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+
+    criteria: list[str] = []
+
+    def _add_unique(text: str) -> None:
+        """Add AC text, deduplicating by substring containment."""
+        for existing in criteria:
+            if text in existing or existing in text:
+                return  # Already covered by a longer/shorter version
+        criteria.append(text)
+
+    # Table row extraction FIRST (most structured, preferred source)
+    ac_section = re.search(
+        r'(?:##\s*(?:验收标准|验收条件|Acceptance Criteria))(.*?)(?=\n##|\Z)',
+        content, re.DOTALL | re.IGNORECASE
+    )
+    if ac_section:
+        for row in re.finditer(r'\|\s*\d+\s*\|\s*(.+?)\s*\|', ac_section.group(1)):
+            text = row.group(1).strip()
+            if len(text) >= 10:
+                _add_unique(text)
+
+    # Pattern-based extraction: "当X时，应该Y" / "When X, should Y" / "Given X, then Y"
+    for pattern in _CRITERIA_PATTERNS[:3]:  # skip checklist pattern for text extraction
+        for match in pattern.finditer(content):
+            text = match.group(0).strip()
+            if len(text) >= 10:
+                _add_unique(text)
+
+    # Checklist extraction: "- [x] description" / "- [ ] description"
+    for match in re.finditer(r'^[-*]\s*\[[ x]\]\s*(.+)', content, re.MULTILINE):
+        text = match.group(1).strip()
+        if len(text) >= 5:
+            _add_unique(text)
+
+    # Fallback: if no structured criteria found, try plain list items in AC section
+    if not criteria and ac_section:
+        for match in re.finditer(r'^[-*]\s+(\S.{9,})', ac_section.group(1), re.MULTILINE):
+            _add_unique(match.group(1).strip())
+
+    return criteria
+
+
 def spec_summary(spec_path: str) -> str:
     """One-line summary of a spec file. For logging and display."""
     result = validate_spec(spec_path)

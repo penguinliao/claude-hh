@@ -8,7 +8,7 @@ Core API:
   run_fix_loop(files) -> FixLoopResult     # Auto-fix loop
 
 v2.0 additions:
-  pipeline: start/advance/status/reset    # 7-stage pipeline state machine
+  pipeline: start/advance/status/reset    # 5-stage pipeline state machine
   telemetry: log_check/report             # SQLite telemetry
   health: check_health                    # Dependency health check
 """

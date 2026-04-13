@@ -14,7 +14,7 @@ def get_required_env(key: str) -> str:
 
 
 # JWT密钥 — 必须配置，无默认值
-JWT_SECRET = get_required_env("JWT_SECRET") if os.environ.get("JWT_SECRET") else None
+JWT_SECRET = get_required_env("JWT_SECRET")
 
 # 数据库路径
 DB_PATH = os.environ.get("DB_PATH", "data.db")

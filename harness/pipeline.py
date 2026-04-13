@@ -243,6 +243,9 @@ def start(
     return state
 
 
+_RISK_LEVELS = {"micro": 0, "small": 1, "standard": 2}
+
+
 def advance(project_root: str, note: str = "") -> AdvanceResult:
     """Advance to next stage after validating exit criteria.
 
@@ -269,6 +272,20 @@ def advance(project_root: str, note: str = "") -> AdvanceResult:
         )
 
     current = state.current_stage
+
+    # v3.5: Advance cooldown — prevent rapid-fire advancing through stages
+    if state.risk_level != "micro" and state.history:
+        last_ts = state.history[-1].timestamp
+        try:
+            elapsed = (datetime.now() - datetime.fromisoformat(last_ts)).total_seconds()
+            if elapsed < 30:
+                return AdvanceResult(
+                    ok=False,
+                    reason=f"advance冷却中（距上次{elapsed:.0f}秒，需等待{30-elapsed:.0f}秒）。"
+                           f"非micro路由每次advance间隔至少30秒。",
+                )
+        except (ValueError, TypeError):
+            pass  # 时间解析失败不阻塞
 
     # Validate exit criteria for current stage
     if current == 1:  # SPEC stage requires spec file
@@ -300,30 +317,134 @@ def advance(project_root: str, note: str = "") -> AdvanceResult:
                 print(f"[harness] ⚠️ spec.md format warning (降级通过): {warnings_text}")
             state.spec_path = spec_path
 
-    elif current == 4:  # REVIEW stage requires review evidence
-        review_path = os.path.join(project_root, ".harness", "review.md")
+    elif current == 4:  # REVIEW stage — harness physically runs check_standard
         if state.risk_level == "micro":
-            # micro: 不需要review.md，只需post_edit检查通过
-            pass  # 跳过review.md检查
-        elif state.risk_level == "small":
-            # small: 自动生成轻量review.md（如果不存在）
-            if not os.path.isfile(review_path):
-                os.makedirs(os.path.dirname(review_path), exist_ok=True)
-                with open(review_path, "w", encoding="utf-8") as f:
-                    f.write(
-                        f"# Auto Review (risk_level=small)\n\n"
-                        f"Automated checks passed. Manual review skipped per risk_level=small.\n"
-                    )
-                print(f"[harness] ⚠️ risk_level=small，已自动生成 review.md（跳过人工审查）")
-            # 有了review.md后，走正常检查（已存在则无需做任何事）
+            # micro: 跳过review（真的只改了10行以内的非敏感文件）
+            pass
         else:
-            # standard: 完整review检查
-            if not os.path.isfile(review_path):
+            # Gate 1: harness runs check_standard on affected files
+            from harness.spec_file import find_spec, extract_affected_files
+            spec_path = find_spec(project_root)
+            affected_files: list[str] = []
+            if spec_path:
+                raw_files = extract_affected_files(spec_path)
+                for f in raw_files:
+                    full = os.path.join(project_root, f)
+                    if os.path.isfile(full) and f.endswith(".py"):
+                        affected_files.append(full)
+
+            if affected_files:
+                try:
+                    from harness.runner import check_standard
+                    report = check_standard(affected_files)
+                    # Distinguish "real failures" from "tools unavailable"
+                    evaluated = [d for d in report.dimensions if d.status == "evaluated"]
+                    if not report.passed and evaluated:
+                        blocked = f" (blocked by: {report.blocked_by})" if report.blocked_by else ""
+                        details = []
+                        for dim in evaluated:
+                            if not dim.passed:
+                                details.append(f"  - {dim.name}: {dim.score}/100")
+                        detail_str = "\n".join(details[:5])
+                        return AdvanceResult(
+                            ok=False,
+                            reason=f"REVIEW自动检查未通过（总分{report.total_score:.0f}/100）{blocked}\n"
+                                   f"未通过的维度:\n{detail_str}\n"
+                                   f"请retreat回IMPLEMENT修复后重新审查。",
+                        )
+                    if evaluated:
+                        print(f"[harness] ✅ REVIEW自动检查通过（{report.total_score:.0f}/100）")
+                    else:
+                        print("[harness] ⚠️ REVIEW检查工具不可用，降级通过")
+                except Exception as exc:
+                    # fail-closed: 检查异常时拒绝advance
+                    return AdvanceResult(
+                        ok=False,
+                        reason=f"REVIEW自动检查异常: {exc}。请确认工具已安装（ruff/mypy/bandit）。",
+                    )
+
+    elif current == 5:  # TEST stage — harness physically runs test scripts
+        if state.risk_level == "micro":
+            # micro: skip AC coverage check, but still execute test scripts if they exist
+            import glob as _glob_m
+            import subprocess as _sp_m
+            harness_dir_m = os.path.join(project_root, ".harness")
+            micro_scripts = sorted(_glob_m.glob(os.path.join(harness_dir_m, "test_*.py")))
+            if micro_scripts:
+                for script in micro_scripts:
+                    try:
+                        res = _sp_m.run(
+                            ["python3", script], cwd=project_root,
+                            capture_output=True, text=True, timeout=60,
+                        )
+                        if res.returncode != 0:
+                            return AdvanceResult(
+                                ok=False,
+                                reason=f"micro测试脚本失败：{os.path.basename(script)} "
+                                       f"(exit {res.returncode})\n{(res.stderr or '')[-300:]}",
+                            )
+                    except Exception as exc:
+                        print(f"[harness] ⚠️ micro测试脚本执行异常：{os.path.basename(script)} ({exc})")
+                print(f"[harness] ✅ micro TEST：{len(micro_scripts)}个脚本通过")
+            # No test scripts for micro → pass (it's really just a typo fix)
+        else:
+            import glob as _glob
+            import subprocess as _sp
+
+            harness_dir = os.path.join(project_root, ".harness")
+            test_scripts = sorted(_glob.glob(os.path.join(harness_dir, "test_*.py")))
+
+            # Gate 1: test scripts must exist
+            if not test_scripts:
                 return AdvanceResult(
                     ok=False,
-                    reason="Stage 4 (REVIEW) requires .harness/review.md — please run a review Agent first. "
-                           "Review must be done by a separate Agent with cognitive isolation (no implementation context).",
+                    reason="Stage 5 (TEST) requires test scripts in .harness/test_*.py — "
+                           "在 IMPLEMENT 阶段必须同时编写可执行的测试脚本。"
+                           "脚本要求：exit 0 表示通过，非零表示失败。",
                 )
+
+            # Gate 2: harness executes each test script, checks exit code
+            failed_scripts: list[str] = []
+            for script in test_scripts:
+                try:
+                    result = _sp.run(
+                        ["python3", script],
+                        cwd=project_root,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+                    if result.returncode != 0:
+                        script_name = os.path.basename(script)
+                        stderr_tail = (result.stderr or "")[-500:]
+                        failed_scripts.append(f"{script_name} (exit {result.returncode}): {stderr_tail}")
+                except _sp.TimeoutExpired:
+                    failed_scripts.append(f"{os.path.basename(script)} (timeout 120s)")
+                except Exception as exc:
+                    failed_scripts.append(f"{os.path.basename(script)} (error: {exc})")
+
+            if failed_scripts:
+                detail = "\n".join(failed_scripts[:5])
+                return AdvanceResult(
+                    ok=False,
+                    reason=f"测试脚本执行失败（{len(failed_scripts)}/{len(test_scripts)}）:\n{detail}\n"
+                           f"请retreat回IMPLEMENT修复后重新测试。",
+                )
+
+            # Gate 3: AC coverage — each acceptance criterion from spec must be tested
+            from harness.spec_file import find_spec, extract_acceptance_criteria
+            spec_path = find_spec(project_root)
+            if spec_path:
+                ac_list = extract_acceptance_criteria(spec_path)
+                if len(ac_list) >= 2 and len(test_scripts) < len(ac_list):
+                    return AdvanceResult(
+                        ok=False,
+                        reason=f"测试脚本数量（{len(test_scripts)}）少于验收标准数量（{len(ac_list)}）。"
+                               f"spec.md中有{len(ac_list)}条AC，每条至少需要1个测试脚本覆盖。"
+                               f"验收标准：{'; '.join(ac_list[:5])}",
+                    )
+
+            print(f"[harness] ✅ TEST通过：{len(test_scripts)}个测试脚本全部exit 0")
 
     # Find next stage in route
     try:
@@ -389,10 +510,9 @@ def is_code_write_allowed(project_root: str, file_path: str = "") -> tuple[bool,
         if ext not in _CODE_EXTENSIONS:
             return True, ""  # Non-code files (md, json, yaml, etc.) always allowed
 
-    # Whitelist: harness-engineering project itself is always allowed (can't lock itself out)
-    harness_dir = str(Path(__file__).resolve().parent.parent)
-    if file_path and str(Path(file_path).resolve()).lower().startswith(harness_dir.lower()):
-        return True, ""
+    # harness-engineering eats its own dogfood: no pipeline stage exemption.
+    # Only spec scope check has a self-edit exemption (in pre_edit.py) to avoid
+    # circular dependency (harness can't list itself in its own spec).
 
     state = get_state(project_root)
 
@@ -403,6 +523,24 @@ def is_code_write_allowed(project_root: str, file_path: str = "") -> tuple[bool,
             "Run: python3 -m harness.pipeline start --route standard --desc \"your task\"\n"
             "Or for small changes: python3 -m harness.pipeline start --route micro --desc \"your task\""
         )
+
+    # v3.6: Pipeline expiration — stale pipelines cannot be reused for new tasks.
+    # Active development updates updated_at every few minutes. 4+ hours of inactivity
+    # means a different session/task — AI must start a fresh pipeline.
+    _EXPIRY_HOURS = 4
+    if state.updated_at:
+        try:
+            _last = datetime.fromisoformat(state.updated_at)
+            _hours = (datetime.now() - _last).total_seconds() / 3600
+            if _hours > _EXPIRY_HOURS:
+                return False, (
+                    f"Pipeline已过期（{_hours:.0f}小时未活动）。\n"
+                    f"旧pipeline不能用于新任务，请先reset再启动新pipeline：\n"
+                    f"  python3 -m harness.pipeline reset\n"
+                    f"  python3 -m harness.pipeline start --route standard --desc \"新任务描述\""
+                )
+        except (ValueError, TypeError):
+            pass  # 时间解析失败不阻塞
 
     # v3.1: Self-heal — if current_stage is not in route_stages, reset to IMPLEMENT
     if state.current_stage not in state.route_stages and state.route_stages:
@@ -429,11 +567,22 @@ def reset(project_root: str) -> None:
         path.unlink()
 
 
-def skip(project_root: str) -> AdvanceResult:
-    """Skip current stage without validation. Emergency use only."""
+def skip(project_root: str, reason: str = "") -> AdvanceResult:
+    """Skip current stage without validation. Emergency use only.
+    REVIEW(4) and TEST(5) cannot be skipped — they are mandatory gates.
+    """
     state = get_state(project_root)
     if state is None:
         return AdvanceResult(ok=False, reason="No active pipeline.")
+
+    # REVIEW and TEST are mandatory — cannot skip
+    if state.current_stage in (4, 5):
+        stage_name = STAGE_NAMES.get(state.current_stage, "")
+        return AdvanceResult(
+            ok=False,
+            reason=f"Stage {state.current_stage} ({stage_name}) 不允许skip，"
+                   f"必须完成审查/测试后用advance推进。",
+        )
 
     # Force advance without exit criteria check
     try:
@@ -583,8 +732,11 @@ def status(project_root: str) -> str:
 def update_risk_level(project_root: str) -> str:
     """调用风险分析器，更新pipeline.json中的risk_level。
 
+    v3.5 Ratchet机制：risk_level只能升不能降。
+    防止大改动通过中途小改自动降级到micro/small绕过REVIEW/TEST检查。
+
     Returns:
-        新的risk_level字符串（"micro"/"small"/"standard"）
+        更新后的risk_level字符串（"micro"/"small"/"standard"）
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -595,18 +747,30 @@ def update_risk_level(project_root: str) -> str:
 
     try:
         from harness.risk_analyzer import analyze_risk
-        new_level = analyze_risk(project_root)
+        proposed_level = analyze_risk(project_root)
     except Exception as e:
         logger.warning(f"风险分析失败，默认standard: {e}")
-        new_level = "standard"
+        proposed_level = "standard"
 
-    if new_level != state.risk_level:
+    # Ratchet: only allow risk_level to go UP, never down
+    current_val = _RISK_LEVELS.get(state.risk_level, 2)
+    proposed_val = _RISK_LEVELS.get(proposed_level, 2)
+
+    if proposed_val > current_val:
+        # 升级：允许
         old_level = state.risk_level
-        state.risk_level = new_level
+        state.risk_level = proposed_level
         _save_state(project_root, state)
-        logger.info(f"[Pipeline] risk_level: {old_level} → {new_level}")
-
-    return new_level
+        logger.info(f"[Pipeline] risk_level升级: {old_level} → {proposed_level}")
+        return proposed_level
+    elif proposed_val < current_val:
+        # 降级：拒绝（ratchet）
+        logger.info(
+            f"[Pipeline] risk_level ratchet: 拒绝从 {state.risk_level} 降到 {proposed_level}"
+        )
+        return state.risk_level
+    else:
+        return state.risk_level
 
 
 # ---------------------------------------------------------------------------

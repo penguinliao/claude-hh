@@ -311,6 +311,32 @@ def handle(ctx: HookContext) -> HookResult:
             message=f"[harness] ⏭️ Agent报告修改了 {len(py_files)} 个代码文件但均不存在，跳过审查"
         )
 
+    # Gate: Agent modified code files → project must have test scripts
+    # This ensures every code change has corresponding tests — not by checking
+    # AI's self-report, but by checking the filesystem.
+    # Only triggers if files were RECENTLY modified (mtime within 120s),
+    # avoiding false positives from read-only agents that merely mention file paths.
+    if existing_files:
+        import glob as _glob
+        now = time.time()
+        recently_modified = [f for f in existing_files
+                             if os.path.isfile(f)
+                             and (now - os.path.getmtime(f)) < 120]
+        if recently_modified:
+            project_root = ctx.project_root or os.getcwd()
+            harness_dir = os.path.join(project_root, ".harness")
+            test_scripts = _glob.glob(os.path.join(harness_dir, "test_*.py"))
+            py_code_files = [f for f in recently_modified if f.endswith(".py")
+                             and not os.path.basename(f).startswith("test_")]
+            if py_code_files and not test_scripts:
+                file_list = ", ".join(os.path.basename(f) for f in py_code_files[:5])
+                return HookResult(
+                    exit_code=2,
+                    message=f"[harness] ❌ Agent修改了代码文件（{file_list}）但项目缺少测试脚本。\n"
+                            f"必须在 .harness/test_*.py 中编写可执行的测试脚本。\n"
+                            f"测试脚本要求：验证spec.md中的验收标准，exit 0=通过。",
+                )
+
     # B4: Delayed imports with try-except, fail-open on ImportError
     start = time.time()
     try:

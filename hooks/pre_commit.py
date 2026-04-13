@@ -109,15 +109,16 @@ def _classify_command(cmd: str) -> tuple[str, str]:
     if not cmd:
         return ("safe", "")
 
-    # R2: Pipeline state tampering detection (check FIRST, before any unwrapping)
-    if re.search(r'pipeline\.json|\.harness/', cmd):
-        if re.search(r'\bopen\b.*["\']w|\bjson\.dump\b|\bwrite_text\b|\becho\s.*>|cat\s.*>', cmd, re.IGNORECASE):
-            return ("pipeline_tamper", "篡改pipeline状态文件")
-        # 拦截 cp/mv/ln/tee/sed -i 对 .harness/ 的操作
-        if re.search(r'\b(?:cp|mv|ln|tee)\b.*\.harness/', cmd):
-            return ("pipeline_tamper", "篡改pipeline状态文件")
-        if re.search(r'\bsed\s+-i\b.*\.harness/', cmd):
-            return ("pipeline_tamper", "篡改pipeline状态文件")
+    # R2: Pipeline state file write protection
+    # Only block actual WRITE operations to .harness/ state files.
+    # Read operations (cat, grep, ls) are legitimate and must not be blocked.
+    # The primary protection is settings.json deny rules (Edit/Write tools).
+    # This hook catches Bash-based write attempts that deny rules can't see.
+    _harness_write = r'\.harness/.*(?:>|>>|\btee\b)'  # shell redirect into .harness/
+    _harness_cmd_write = r'\b(?:cp|mv|ln)\b.*\.harness/'  # file ops into .harness/
+    _harness_sed = r'\bsed\s+-i\b.*\.harness/'  # in-place edit
+    if re.search(_harness_write, cmd) or re.search(_harness_cmd_write, cmd) or re.search(_harness_sed, cmd):
+        return ("pipeline_tamper", "篡改pipeline状态文件")
 
     # R1a: Unwrap shell -c "..." wrappers (bash/sh/zsh -c "inner command")
     wrapper_match = re.match(
@@ -148,12 +149,13 @@ def _classify_command(cmd: str) -> tuple[str, str]:
         for pat, label in _DB_PATTERNS:
             if re.search(pat, inner, re.IGNORECASE):
                 return ("db_mutation", f"Python脚本中的{label}")
-        # Check for pipeline tampering
-        if re.search(r'pipeline\.json|\.harness/', inner):
-            return ("pipeline_tamper", "Python脚本篡改pipeline状态")
+        # Pipeline state protection is handled by settings.json deny rules
+        # (Edit/Write blocked) and Bash deny rules (>, >>, tee, cp, mv to .harness/).
+        # No keyword scanning needed — it blocks legitimate operations like
+        # writing test scripts or reading logs.
 
     # R1c: Split chain commands (;  &&  ||) and classify each part
-    if re.search(r'[;&|]{1,2}', cmd):
+    if re.search(r'[;&]|&&|\|\|', cmd):
         subcmds = re.split(r'\s*(?:;|\&\&|\|\|)\s*', cmd)
         for sub in subcmds:
             sub = sub.strip()
@@ -204,6 +206,12 @@ def handle(ctx: HookContext) -> HookResult:
                 )
             if state:
                 return HookResult(exit_code=0, message=f"[harness] ⚠️ 部署操作：{desc} (Stage {state.current_stage})")
+            # 没有活跃pipeline时也拦截SSH部署操作（防止跳过pipeline直接改服务器）
+            if state is None:
+                return HookResult(
+                    exit_code=2,
+                    message=f"[harness] ❌ 检测到部署操作：{desc}\n当前没有活跃的pipeline，请先启动pipeline再部署\n命令：PYTHONPATH=~/Desktop/harness-engineering python3 -m harness.pipeline start --project=<项目路径> --route=standard-deploy",
+                )
         except Exception:
             pass  # Fail-open
 

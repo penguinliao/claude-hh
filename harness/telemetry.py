@@ -140,9 +140,15 @@ def report(days: int = 30, project: str | None = None) -> str:
             where += " AND project = ?"
             params.append(project)
 
+        # Build parameterized WHERE conditions
+        conditions = ["timestamp > ?"]
+        if project:
+            conditions.append("project = ?")
+        where_clause = "WHERE " + " AND ".join(conditions)
+
         # Total events and pass rate
         row = conn.execute(
-            f"SELECT COUNT(*) as total, SUM(passed) as passed FROM check_events {where}",
+            "SELECT COUNT(*) as total, SUM(passed) as passed FROM check_events " + where_clause,
             params,
         ).fetchone()
         total = row["total"] or 0
@@ -155,7 +161,7 @@ def report(days: int = 30, project: str | None = None) -> str:
 
         # Average score and iterations
         row2 = conn.execute(
-            f"SELECT AVG(total_score) as avg_score, AVG(iteration) as avg_iter FROM check_events {where}",
+            "SELECT AVG(total_score) as avg_score, AVG(iteration) as avg_iter FROM check_events " + where_clause,
             params,
         ).fetchone()
         avg_score = row2["avg_score"] or 0
@@ -163,20 +169,22 @@ def report(days: int = 30, project: str | None = None) -> str:
 
         # Most common blocked_by
         blocked_rows = conn.execute(
-            f"SELECT blocked_by, COUNT(*) as cnt FROM check_events {where} AND blocked_by IS NOT NULL GROUP BY blocked_by ORDER BY cnt DESC LIMIT 5",
+            "SELECT blocked_by, COUNT(*) as cnt FROM check_events "
+            + where_clause + " AND blocked_by IS NOT NULL GROUP BY blocked_by ORDER BY cnt DESC LIMIT 5",
             params,
         ).fetchall()
 
         # Per-project breakdown
         project_rows = conn.execute(
-            f"SELECT project, COUNT(*) as total, SUM(passed) as passed FROM check_events {where} GROUP BY project ORDER BY total DESC LIMIT 10",
+            "SELECT project, COUNT(*) as total, SUM(passed) as passed FROM check_events "
+            + where_clause + " GROUP BY project ORDER BY total DESC LIMIT 10",
             params,
         ).fetchall()
 
         # Most failed dimensions (parse dimensions_json)
         dim_failures: dict[str, int] = {}
         dim_rows = conn.execute(
-            f"SELECT dimensions_json FROM check_events {where} AND dimensions_json IS NOT NULL",
+            "SELECT dimensions_json FROM check_events " + where_clause + " AND dimensions_json IS NOT NULL",
             params,
         ).fetchall()
         for dr in dim_rows:
