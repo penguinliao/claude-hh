@@ -346,11 +346,20 @@ def advance(project_root: str, note: str = "") -> AdvanceResult:
                             if not dim.passed:
                                 details.append(f"  - {dim.name}: {dim.score}/100")
                         detail_str = "\n".join(details[:5])
+                        fail_reason = (
+                            f"REVIEW自动检查未通过（总分{report.total_score:.0f}/100）{blocked}\n"
+                            f"未通过的维度:\n{detail_str}\n"
+                            f"请retreat回IMPLEMENT修复后重新审查。"
+                        )
+                        state.history.append(StageEntry(
+                            stage=current, status="FAIL",
+                            timestamp=datetime.now().isoformat(),
+                            note=fail_reason,
+                        ))
+                        _save_state(project_root, state)
                         return AdvanceResult(
                             ok=False,
-                            reason=f"REVIEW自动检查未通过（总分{report.total_score:.0f}/100）{blocked}\n"
-                                   f"未通过的维度:\n{detail_str}\n"
-                                   f"请retreat回IMPLEMENT修复后重新审查。",
+                            reason=fail_reason,
                         )
                     if evaluated:
                         print(f"[harness] ✅ REVIEW自动检查通过（{report.total_score:.0f}/100）")
@@ -425,26 +434,82 @@ def advance(project_root: str, note: str = "") -> AdvanceResult:
 
             if failed_scripts:
                 detail = "\n".join(failed_scripts[:5])
+                fail_reason = (
+                    f"测试脚本执行失败（{len(failed_scripts)}/{len(test_scripts)}）:\n{detail}\n"
+                    f"请retreat回IMPLEMENT修复后重新测试。"
+                )
+                state.history.append(StageEntry(
+                    stage=current, status="FAIL",
+                    timestamp=datetime.now().isoformat(),
+                    note=fail_reason,
+                ))
+                _save_state(project_root, state)
                 return AdvanceResult(
                     ok=False,
-                    reason=f"测试脚本执行失败（{len(failed_scripts)}/{len(test_scripts)}）:\n{detail}\n"
-                           f"请retreat回IMPLEMENT修复后重新测试。",
+                    reason=fail_reason,
                 )
 
-            # Gate 3: AC coverage — each acceptance criterion from spec must be tested
+            print(f"[harness] ✅ TEST通过：{len(test_scripts)}个测试脚本全部exit 0")
+
+            # Gate 2: 小测审计报告（如果有 brief 就必须有 report）
+            xiaoce_brief = os.path.join(harness_dir, "xiaoce_brief.md")
+            xiaoce_report = os.path.join(harness_dir, "xiaoce_report.md")
+            if os.path.isfile(xiaoce_brief):
+                if not os.path.isfile(xiaoce_report):
+                    return AdvanceResult(
+                        ok=False,
+                        reason="小测审计任务书(xiaoce_brief.md)已定义，但未找到审计报告(xiaoce_report.md)。\n"
+                               "请派小测Agent执行白盒审计后再advance。",
+                    )
+                with open(xiaoce_report, encoding="utf-8") as _xr_f:
+                    report_content = _xr_f.read().strip()
+                if not report_content:
+                    return AdvanceResult(
+                        ok=False,
+                        reason="小测审计报告(xiaoce_report.md)为空。请确保小测完成审计并写入报告。",
+                    )
+                print("[harness] ✅ Gate 2: 小测审计报告已确认")
+
+            # Gate 3: 浊龙验收报告（如果有 brief 就必须有 report）
+            zhuolong_brief = os.path.join(harness_dir, "zhuolong_brief.md")
+            zhuolong_report = os.path.join(harness_dir, "zhuolong_report.md")
+            if os.path.isfile(zhuolong_brief):
+                if not os.path.isfile(zhuolong_report):
+                    return AdvanceResult(
+                        ok=False,
+                        reason="浊龙交付单(zhuolong_brief.md)已定义，但未找到验收报告(zhuolong_report.md)。\n"
+                               "请派浊龙Agent执行黑盒验收后再advance。",
+                    )
+                with open(zhuolong_report, encoding="utf-8") as _zlr_f:
+                    report_content = _zlr_f.read().strip()
+                if not report_content:
+                    return AdvanceResult(
+                        ok=False,
+                        reason="浊龙验收报告(zhuolong_report.md)为空。请确保浊龙完成验收并写入报告。",
+                    )
+                print("[harness] ✅ Gate 3: 浊龙验收报告已确认")
+
+            # Gate 4: AC coverage — each acceptance criterion from spec must be tested
             from harness.spec_file import find_spec, extract_acceptance_criteria
             spec_path = find_spec(project_root)
             if spec_path:
                 ac_list = extract_acceptance_criteria(spec_path)
                 if len(ac_list) >= 2 and len(test_scripts) < len(ac_list):
+                    fail_reason = (
+                        f"测试脚本数量（{len(test_scripts)}）少于验收标准数量（{len(ac_list)}）。"
+                        f"spec.md中有{len(ac_list)}条AC，每条至少需要1个测试脚本覆盖。"
+                        f"验收标准：{'; '.join(ac_list[:5])}"
+                    )
+                    state.history.append(StageEntry(
+                        stage=current, status="FAIL",
+                        timestamp=datetime.now().isoformat(),
+                        note=fail_reason,
+                    ))
+                    _save_state(project_root, state)
                     return AdvanceResult(
                         ok=False,
-                        reason=f"测试脚本数量（{len(test_scripts)}）少于验收标准数量（{len(ac_list)}）。"
-                               f"spec.md中有{len(ac_list)}条AC，每条至少需要1个测试脚本覆盖。"
-                               f"验收标准：{'; '.join(ac_list[:5])}",
+                        reason=fail_reason,
                     )
-
-            print(f"[harness] ✅ TEST通过：{len(test_scripts)}个测试脚本全部exit 0")
 
     # Find next stage in route
     try:
@@ -671,11 +736,16 @@ def fail(project_root: str, reason: str = "") -> FailResult:
     )
 
 
-def retreat(project_root: str, target_stage: int) -> AdvanceResult:
+def retreat(project_root: str, target_stage: int, reason: str = "") -> AdvanceResult:
     """Retreat to an earlier stage for fixing. Used when Stage 5/6 fails.
 
     Only allows retreating to stages in the current route that are <= current stage.
     Resets consecutive_fails counter.
+
+    Args:
+        project_root: Path to project root.
+        target_stage: Stage number to retreat to.
+        reason: Human-readable reason for retreating (stored in FAIL history entry).
     """
     state = get_state(project_root)
     if state is None:
@@ -690,7 +760,7 @@ def retreat(project_root: str, target_stage: int) -> AdvanceResult:
     now = datetime.now().isoformat()
     state.history.append(StageEntry(
         stage=state.current_stage, status="FAIL", timestamp=now,
-        note=f"Retreating to Stage {target_stage}",
+        note=reason if reason else f"Retreating to Stage {target_stage}",
     ))
     state.current_stage = target_stage
     state.consecutive_fails = 0

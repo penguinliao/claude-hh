@@ -54,8 +54,11 @@ def _extract_domain(files: list[str]) -> str:
     return "general"
 
 
-def _extract_trigger_words(ac_texts: list[str]) -> list[str]:
-    """Extract keywords (length >= 2) from acceptance criteria text."""
+def _extract_trigger_words(ac_texts: list[str], files: list[str] | None = None) -> list[str]:
+    """Extract keywords (length >= 2) from acceptance criteria text.
+
+    Falls back to file-name extraction when fewer than 3 words are found from AC texts.
+    """
     words: set[str] = set()
     combined = " ".join(ac_texts)
 
@@ -74,6 +77,20 @@ def _extract_trigger_words(ac_texts: list[str]) -> list[str]:
         word = m.group(0).lower()
         if word not in stopwords:
             words.add(word)
+
+    # Fallback: supplement from file names when fewer than 3 words extracted
+    if len(words) < 3 and files:
+        _skip_stems = {"__init__", "main", "utils", "test", "helpers", "common", "base"}
+        _skip_parts = {".", "..", "src", "core", "api", "lib", "harness", "hooks"}
+        for f in files:
+            stem = Path(f).stem
+            if stem and stem not in _skip_stems:
+                words.add(stem.lower())
+            # Also extract meaningful directory names from path
+            parts = Path(f).parts
+            for part in parts:
+                if part not in _skip_parts and len(part) >= 2:
+                    words.add(part.lower())
 
     return sorted(words)[:20]  # cap at 20 keywords
 
@@ -126,7 +143,14 @@ def _build_skill_doc(
     trigger_yaml = json.dumps(trigger_words)
     dim_yaml = json.dumps(failure_dimensions)
 
-    problem_section = "\n".join(f"- {note}" for note in fail_notes) if fail_notes else "- (未记录具体失败原因)"
+    # Truncate long notes to first 200 chars to keep the skill doc concise
+    truncated_notes = []
+    for note in fail_notes:
+        truncated_notes.append(note[:200] if len(note) > 200 else note)
+    problem_section = "\n".join(f"- {note}" for note in truncated_notes) if truncated_notes else "- (未记录具体失败原因)"
+
+    # Build rules: use specific content from fail_notes when available
+    combined_notes = " ".join(fail_notes).lower()
 
     rules_map = {
         "functional": "- 实现前先确认接口签名和返回格式与调用方一致",
@@ -137,11 +161,25 @@ def _build_skill_doc(
         "test": "- 每条 AC 至少有一个独立测试脚本；关键字段 assert 长度/格式而非仅检查无异常",
     }
 
+    # Specific score-based rules override generic ones when score info is present
+    specific_rules_map = {
+        "security": "- security 维度得分偏低：禁止 f-string 拼 SQL，密钥必须从环境变量读取，XML 禁用外部实体",
+        "style": "- style/format 维度得分偏低：提交前必须运行 ruff check --fix，消除所有 E/W 错误",
+        "type": "- type 维度得分偏低：公开函数必须有类型注解，运行 mypy --strict 确认零错误",
+        "functional": "- functional 维度得分偏低：接口签名、返回格式必须与调用方对齐后再提交",
+        "test": "- test 维度得分偏低：每条 AC 对应一个独立脚本，断言最终输出非空而非只检查无异常",
+    }
+
+    has_score_info = bool(re.search(r'\d+/100', combined_notes))
+
     rules_lines: list[str] = []
     for dim in failure_dimensions:
-        rule = rules_map.get(dim)
-        if rule:
-            rules_lines.append(rule)
+        if has_score_info and dim in specific_rules_map:
+            rules_lines.append(specific_rules_map[dim])
+        else:
+            rule = rules_map.get(dim)
+            if rule:
+                rules_lines.append(rule)
     if not rules_lines:
         rules_lines.append("- 完成实现后先自测核心路径，确认最终输出非空")
 
@@ -263,7 +301,7 @@ def extract_skill(
     # --- 5. Derive skill metadata ---
     try:
         domain = _extract_domain(affected_files)
-        trigger_words = _extract_trigger_words(ac_texts)
+        trigger_words = _extract_trigger_words(ac_texts, affected_files)
         severity = _severity_from_retreats(fail_count)
         fail_notes = _extract_fail_notes(state.history)
         failure_dims = _extract_failure_dimensions(fail_notes)
