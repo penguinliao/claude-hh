@@ -1,14 +1,14 @@
-# Claude Rails 🚂
+# Claude H-H ⚙️
 
-> **Rails for Claude Code — put your AI pair-programmer on a track**
+> **Harness + Hermes for Claude Code — quality gates that learn from mistakes**
 > Turn Claude Code's code accuracy from ~50% to 80%+
 > Built for non-technical PMs and developers who care about quality
 
 **Language**: **English** · [简体中文](README.zh-CN.md)
 
-<sub>📦 Project brand: **Claude Rails** · Core engine & CLI: **harness** (same pattern as Ruby on Rails' `rails` gem — brand name and CLI name don't have to match)</sub>
+<sub>📦 **H-H** = **H**arness (quality gate engine) + **H**ermes (skill learning system) · CLI: **harness**</sub>
 
-[![CI](https://github.com/penguinliao/claude-rails/actions/workflows/test.yml/badge.svg)](https://github.com/penguinliao/claude-rails/actions/workflows/test.yml)
+[![CI](https://github.com/penguinliao/claude-hh/actions/workflows/test.yml/badge.svg)](https://github.com/penguinliao/claude-hh/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-required-orange.svg)](https://claude.ai/download)
@@ -16,7 +16,7 @@
 ## One-line install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-rails/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-hh/main/install.sh | bash
 ```
 
 Ready in 2 minutes. **Read the "benefits vs costs" table below before you install.**
@@ -41,7 +41,7 @@ Ready in 2 minutes. **Read the "benefits vs costs" table below before you instal
 
 ## Benefits vs Costs (the core tradeoff)
 
-| Dimension | Without Claude Rails | With Claude Rails |
+| Dimension | Without Claude H-H | With Claude H-H |
 |---|---|---|
 | **Code accuracy** | ~50% (Anthropic internal data) | **~80%+** (based on 367 real bugs) |
 | **Security vulnerabilities** | AI may write SQL injection, hardcoded secrets | **Physical blocks on 10 golden rules** |
@@ -57,7 +57,7 @@ Ready in 2 minutes. **Read the "benefits vs costs" table below before you instal
 
 ```bash
 # 1. Install (once, 2 minutes)
-curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-rails/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-hh/main/install.sh | bash
 
 # 2. Enable in any project
 cd your-project/
@@ -67,7 +67,7 @@ harness init
 claude
 ```
 
-Then tell Claude: **"build feature X"** — Claude Rails will make it walk through 5 stages:
+Then tell Claude: **"build feature X"** — Claude H-H will make it walk through 5 stages:
 `SPEC → DESIGN → IMPLEMENT → REVIEW → TEST`
 
 Every stage has a physical gate. Can't advance without passing. You don't need to understand the stages — you only need to:
@@ -137,7 +137,7 @@ Weights derived from analyzing 367 real bugs across production projects:
 
 ## Why we can claim "50% → 80%"
 
-This isn't marketing fluff. Claude Rails follows three principles:
+This isn't marketing fluff. Claude H-H follows three principles:
 
 1. **Environment > Model**
    From Mitchell Hashimoto's 2026 "Harness Engineering" concept — don't chase a stronger AI, chase a better verification environment.
@@ -146,7 +146,7 @@ This isn't marketing fluff. Claude Rails follows three principles:
    We don't believe AI when it says "I fixed it". Hooks run real tools to verify. AI cannot bypass — try to write code? No active pipeline → blocked. Pipeline not in IMPLEMENT stage → blocked.
 
 3. **Spec-first** (Self-Spec, ICLR 2026)
-   Making AI write a spec before coding improves pass rate by 2–5%. Claude Rails turns this into a mandatory flow.
+   Making AI write a spec before coding improves pass rate by 2–5%. Claude H-H turns this into a mandatory flow.
 
 ### This project uses itself to develop itself
 From v0.1, every code change in this repo walks through its own 5-stage pipeline. **If it can't reliably constrain itself, what makes you think it can constrain your project?**
@@ -161,7 +161,7 @@ I've been using Claude Code for months to prototype ideas. What drove me crazy w
 
 So I asked a dumb question: **what if we stop asking AI and start verifying AI?**
 
-Claude Rails is the answer. It went from "idea" to "v0.1 on GitHub with green CI and bilingual docs" in roughly 3 hours. The whole thing was built by Claude Code, while being constrained by Claude Rails mid-development. The tool dogfoods itself into existence.
+Claude H-H is the answer. It went from "idea" to "v0.1 on GitHub with green CI and bilingual docs" in roughly 3 hours. The whole thing was built by Claude Code, while being constrained by Claude H-H mid-development. The tool dogfoods itself into existence.
 
 I'm not sharing this because I'm a great engineer (I'm not). I'm sharing it because the *method* works:
 
@@ -171,7 +171,7 @@ I'm not sharing this because I'm a great engineer (I'm not). I'm sharing it beca
 
 If a non-technical PM can build a quality harness with these principles, imagine what engineers can do.
 
-**Don't take my word for it**: check the [git history](https://github.com/penguinliao/claude-rails/commits/main). Every commit message explains *why*. You can trace the entire 3-hour build, including the bugs the harness caught on itself during development.
+**Don't take my word for it**: check the [git history](https://github.com/penguinliao/claude-hh/commits/main). Every commit message explains *why*. You can trace the entire 3-hour build, including the bugs the harness caught on itself during development.
 
 ---
 
@@ -184,15 +184,15 @@ A: Yes, but with **auto-backup** to `~/.claude/settings.json.backup.<timestamp>`
 A: One command: `harness uninstall`. Deletes `~/.harness/`, restores the settings.json backup. No residue.
 
 **Q: 2–3x token cost? I can't afford that.**
-A: True, that's the cost. Claude Rails fits **quality-matters-more-than-cost** scenarios (production code, paid client projects, open-source releases). If you're writing weekend toys, **don't install it** — use vanilla Claude Code.
+A: True, that's the cost. Claude H-H fits **quality-matters-more-than-cost** scenarios (production code, paid client projects, open-source releases). If you're writing weekend toys, **don't install it** — use vanilla Claude Code.
 
 **Q: Does it support Cursor / Aider / Continue?**
-A: No. Claude Rails depends on Claude Code's hook system.
+A: No. Claude H-H depends on Claude Code's hook system.
 
 **Q: Does it support Java / Go / Rust?**
 A: Not yet. Only Python / TypeScript / Vue have full physical constraints.
 
-**Q: What's the code quality of Claude Rails itself?**
+**Q: What's the code quality of Claude H-H itself?**
 A: From v0.1, every change is constrained by its own pipeline. We don't do "the cobbler's children have no shoes".
 
 ---
@@ -226,11 +226,11 @@ cp ~/.claude/settings.json.backup.<latest-timestamp> ~/.claude/settings.json
 
 ## For developers
 
-Want to contribute to Claude Rails itself?
+Want to contribute to Claude H-H itself?
 
 ```bash
-git clone https://github.com/penguinliao/claude-rails
-cd claude-rails
+git clone https://github.com/penguinliao/claude-hh
+cd claude-hh
 pip install -e .
 ```
 
@@ -245,7 +245,7 @@ Deep-dive documentation:
 
 ## Research basis
 
-Claude Rails isn't based on gut feeling. Every core decision has evidence:
+Claude H-H isn't based on gut feeling. Every core decision has evidence:
 
 - **Harness Engineering** (Mitchell Hashimoto, 2026) — environment > model
 - **Self-Spec** (ICLR 2026) — spec-first improves pass rate by 2–5%

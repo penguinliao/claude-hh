@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Claude Rails — one-line installer / 一行命令安装脚本
+# Claude H-H — one-line installer / 一行命令安装脚本
 # Usage / 用法:
-#   curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-rails/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-hh/main/install.sh | bash
 # Local dev / 本地测试:
 #   HARNESS_LOCAL_DEV=1 bash install.sh
 set -euo pipefail
@@ -9,7 +9,7 @@ set -euo pipefail
 # ─────────────────────────────────────────────────────────
 # 配置
 # ─────────────────────────────────────────────────────────
-GITHUB_REPO="penguinliao/claude-rails"
+GITHUB_REPO="penguinliao/claude-hh"
 HARNESS_DIR="$HOME/.harness"
 BIN_DIR="$HOME/.local/bin"
 TOOLS="ruff mypy bandit detect-secrets radon pre-commit"
@@ -57,7 +57,7 @@ trap cleanup_on_failure ERR
 show_banner() {
     printf "\n"
     bold "╔════════════════════════════════════════════════════════╗"
-    bold "║              Claude Rails 🚂                           ║"
+    bold "║              Claude H-H 🚂                           ║"
     bold "║   Rails for Claude Code — put AI on a track            ║"
     bold "║   给 AI 编程铺一条轨道                                 ║"
     bold "║   Turn code accuracy from 50% to 80%+                  ║"

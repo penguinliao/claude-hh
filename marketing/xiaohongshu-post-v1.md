@@ -1,7 +1,7 @@
 # 小红书发布文案 v1
 
 ## 封面建议
-- 背景：纯色（白或浅蓝），放一个大大的 🚂 emoji 和 "Claude Rails" 字样
+- 背景：纯色（白或浅蓝），放一个大大的 🚂 emoji 和 "Claude H-H" 字样
 - 副标题：「让 AI 写代码准确率从 50% 提升到 80%+」
 - 右下角小字：「3 小时从想法到开源」
 - 或者：直接用 GitHub 首页截图 + CI 绿色徽章
@@ -48,7 +48,7 @@
 
 ---
 
-🚂 Claude Rails 就是答案
+🚂 Claude H-H 就是答案
 
 它做一件很简单的事：
 不相信 AI 说"我修好了"，
@@ -116,7 +116,7 @@ AI 想跳？hook 直接拦截。
 
 打开终端，粘贴这一行：
 
-curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-rails/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-hh/main/install.sh | bash
 
 脚本会自动：
 ① 检测 Claude Code 和 Python 环境
@@ -155,14 +155,14 @@ SPEC → DESIGN → IMPLEMENT → REVIEW → TEST
 🧪 不信？去看 git 历史
 
 这个项目本身是用 Claude Code 开发的。
-而开发过程中，它被 Claude Rails 反过来约束着。
+而开发过程中，它被 Claude H-H 反过来约束着。
 整个项目花了 3 小时，从想法到开源上线。
 
 每一次 commit 的 message 都写了「为什么」。
 包括 harness 在开发自己时抓到的几个 bug。
 
 不必相信我，去看 git 历史：
-github.com/penguinliao/claude-rails/commits/main
+github.com/penguinliao/claude-hh/commits/main
 
 ---
 
@@ -179,13 +179,13 @@ harness uninstall
 🔗 链接
 
 GitHub（英文首页 + 中文 README）：
-https://github.com/penguinliao/claude-rails
+https://github.com/penguinliao/claude-hh
 
 中文完整说明：
-https://github.com/penguinliao/claude-rails/blob/main/README.zh-CN.md
+https://github.com/penguinliao/claude-hh/blob/main/README.zh-CN.md
 
 遇到问题提 issue：
-https://github.com/penguinliao/claude-rails/issues
+https://github.com/penguinliao/claude-hh/issues
 
 ---
 
@@ -219,7 +219,7 @@ https://github.com/penguinliao/claude-rails/issues
 4. **关键数据加粗**：50% → 80%、2-3 倍、3 小时
 5. **代码用「」或直接贴**：小红书不支持 markdown，用等宽符号包裹
 6. **图片建议**：
-   - 图 1：封面（Claude Rails 🚂 + 核心价值）
+   - 图 1：封面（Claude H-H 🚂 + 核心价值）
    - 图 2：GitHub 首页截图（展示 CI 绿色 + star 数）
    - 图 3：install.sh 运行截图（双语横幅）
    - 图 4：收益 vs 代价表格图（我可以帮你做）

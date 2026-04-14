@@ -188,7 +188,7 @@ def _build_skill_doc(
     doc = f"""---
 id: {skill_id}
 version: "1.0"
-platforms: [claude-rails]
+platforms: [claude-hh]
 domain: {domain}
 files: {files_yaml}
 trigger_words: {trigger_yaml}

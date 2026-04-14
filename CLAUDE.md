@@ -4,14 +4,14 @@
 
 ---
 
-# Claude Rails — 项目全景
+# Claude H-H — 项目全景
 
-> Rails for Claude Code — 把 AI 编程的代码准确率从 ~50% 提升到 80%+
+> Harness + Hermes for Claude Code — 会从错误中学习的代码质量门禁
 
-**品牌**：Claude Rails 🚂
-**核心引擎 & CLI**：harness（类比 Ruby on Rails 的 `rails` 命令）
-**仓库**：https://github.com/penguinliao/claude-rails
-**版本**：v0.2.0 (MIT)
+**品牌**：Claude H-H ⚙️（H-H = Harness 质量门禁 + Hermes 经验学习）
+**核心引擎 & CLI**：harness
+**仓库**：https://github.com/penguinliao/claude-hh
+**版本**：v0.3.0 (MIT)
 **目标用户**：使用 Claude Code 做生产项目的 PM 和开发者
 
 ---

@@ -1,14 +1,14 @@
-# Claude Rails 🚂
+# Claude H-H ⚙️
 
-> **Rails for Claude Code — 给 AI 编程铺一条轨道**
+> **Harness + Hermes for Claude Code — 会从错误中学习的代码质量门禁**
 > 让 Claude Code 生成的代码准确率从 50% 提升到 80%+
 > 为非技术 PM 和追求代码质量的开发者设计
 
 **Language**: [English](README.md) · **简体中文**
 
-<sub>📦 项目品牌名：**Claude Rails** · 核心引擎与 CLI 命令：**harness**（和 Ruby on Rails 的 `rails` gem 一样，品牌名和命令名可以不一致）</sub>
+<sub>📦 **H-H** = **H**arness（质量门禁引擎）+ **H**ermes（经验学习系统）· CLI 命令：**harness**</sub>
 
-[![CI](https://github.com/penguinliao/claude-rails/actions/workflows/test.yml/badge.svg)](https://github.com/penguinliao/claude-rails/actions/workflows/test.yml)
+[![CI](https://github.com/penguinliao/claude-hh/actions/workflows/test.yml/badge.svg)](https://github.com/penguinliao/claude-hh/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-required-orange.svg)](https://claude.ai/download)
@@ -16,7 +16,7 @@
 ## 一行命令安装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-rails/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-hh/main/install.sh | bash
 ```
 
 2 分钟后可用。**先看下面的"收益 vs 代价"再决定装不装。**
@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-rails/main/insta
 
 ## 收益 vs 代价（核心）
 
-| 维度 | 不用 Claude Rails | 用 Claude Rails |
+| 维度 | 不用 Claude H-H | 用 Claude H-H |
 |---|---|---|
 | **代码准确率** | ~50%（Anthropic 内部数据）| **~80%+**（基于 367 项真实 bug 数据）|
 | **安全漏洞** | AI 可能写出 SQL 注入、硬编码密钥 | **物理拦截 10 条铁律**（查到就 block） |
@@ -57,7 +57,7 @@ curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-rails/main/insta
 
 ```bash
 # 1. 安装（一次性，2 分钟）
-curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-rails/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/penguinliao/claude-hh/main/install.sh | bash
 
 # 2. 在任何项目里启用
 cd 你的项目/
@@ -67,12 +67,12 @@ harness init
 claude
 ```
 
-然后告诉 Claude：**"开发 XX 功能"**，Claude Rails 会让它自动走 5 个阶段：
+然后告诉 Claude：**"开发 XX 功能"**，Claude H-H 会让它自动走 5 个阶段：
 `SPEC → DESIGN → IMPLEMENT → REVIEW → TEST`
 
 每个阶段都有物理门禁，不通过不能进下一步。你不需要懂这些阶段，只需要：
 - 起点：告诉 Claude 要做什么
-- 终点：看 Claude Rails 汇报"全部通过"时验收
+- 终点：看 Claude H-H 汇报"全部通过"时验收
 
 ---
 
@@ -137,7 +137,7 @@ claude
 
 ## 为什么我敢说 "50% → 80%"
 
-这不是随便说的数字。Claude Rails 本身设计遵循三个原则：
+这不是随便说的数字。Claude H-H 本身设计遵循三个原则：
 
 1. **Environment > Model**（环境比模型重要）
    来自 Mitchell Hashimoto 2026 年的 "Harness Engineering" 概念——不追求更强的 AI，追求更好的验证环境
@@ -146,9 +146,9 @@ claude
    不相信 AI 说 "我修好了"，hook 跑真实工具验证。AI 绕不过去——想写代码？没有 pipeline 我就拦。pipeline 不在 IMPLEMENT 阶段？我就拦。
 
 3. **规格优先**（Self-Spec, ICLR 2026）
-   让 AI 先写规格再动手，通过率提升 2-5%。Claude Rails 把这个原理做成了强制流程
+   让 AI 先写规格再动手，通过率提升 2-5%。Claude H-H 把这个原理做成了强制流程
 
-### 这个项目是用 Claude Rails 自己开发 Claude Rails 开发的
+### 这个项目是用 Claude H-H 自己开发 Claude H-H 开发的
 从 v0.1 开始，这个仓库的每一次代码改动都走自己的 5 阶段流水线。**如果它不能可靠地约束自己，凭什么说它能约束你的项目？**
 
 ---
@@ -161,7 +161,7 @@ claude
 
 于是我问自己一个很朴素的问题：**如果不再"问" AI，而是"验证" AI 呢？**
 
-Claude Rails 就是答案。从"有这个想法"到"在 GitHub 上发布 v0.1、CI 全绿、双语文档、一行命令安装"，大约 3 小时。这个项目是用 Claude Code 开发的——而在开发过程中，它被 Claude Rails 反过来约束着。工具用自己开发自己。
+Claude H-H 就是答案。从"有这个想法"到"在 GitHub 上发布 v0.1、CI 全绿、双语文档、一行命令安装"，大约 3 小时。这个项目是用 Claude Code 开发的——而在开发过程中，它被 Claude H-H 反过来约束着。工具用自己开发自己。
 
 我分享它不是因为我是一个了不起的工程师（我不是）。我分享它是因为这个**方法**有效：
 
@@ -171,7 +171,7 @@ Claude Rails 就是答案。从"有这个想法"到"在 GitHub 上发布 v0.1、
 
 如果一个不懂代码的产品经理都能做出这个工具，工程师能做出什么呢？
 
-**不必相信我**：去看 [git 历史](https://github.com/penguinliao/claude-rails/commits/main)。这个仓库的每一次 commit message 都解释了"为什么"。你可以追溯完整的 3 小时开发过程，包括 harness 在开发自己时抓到的那些 bug。
+**不必相信我**：去看 [git 历史](https://github.com/penguinliao/claude-hh/commits/main)。这个仓库的每一次 commit message 都解释了"为什么"。你可以追溯完整的 3 小时开发过程，包括 harness 在开发自己时抓到的那些 bug。
 
 ---
 
@@ -184,15 +184,15 @@ A: 会，但**自动备份**到 `~/.claude/settings.json.backup.时间戳`。合
 A: 一条命令：`harness uninstall`。删掉 `~/.harness/`，恢复 settings.json 备份。没有残留。
 
 **Q: token 真的翻 2-3 倍？我付不起。**
-A: 是的，这是代价。Claude Rails 适合**质量重要于成本**的场景（生产代码、付费客户项目、开源发布）。如果你写的是周末玩具，**不要装**——用原生 Claude Code 就好。
+A: 是的，这是代价。Claude H-H 适合**质量重要于成本**的场景（生产代码、付费客户项目、开源发布）。如果你写的是周末玩具，**不要装**——用原生 Claude Code 就好。
 
 **Q: 支持 Cursor / Aider / Continue 吗？**
-A: 不支持。Claude Rails 强依赖 Claude Code 的 hook 系统。
+A: 不支持。Claude H-H 强依赖 Claude Code 的 hook 系统。
 
 **Q: 支持 Java / Go / Rust 吗？**
 A: 目前不支持。只有 Python / TypeScript / Vue 有完整物理约束。
 
-**Q: Claude Rails 自己的代码质量如何？**
+**Q: Claude H-H 自己的代码质量如何？**
 A: 从 v0.1 起，每次改动都被自己的 pipeline 约束。我们不搞"医者不自医"。
 
 ---
@@ -226,11 +226,11 @@ cp ~/.claude/settings.json.backup.最新时间 ~/.claude/settings.json
 
 ## 对于开发者
 
-想参与 Claude Rails 的开发？
+想参与 Claude H-H 的开发？
 
 ```bash
-git clone https://github.com/penguinliao/claude-rails
-cd claude-rails
+git clone https://github.com/penguinliao/claude-hh
+cd claude-hh
 pip install -e .
 ```
 
@@ -245,7 +245,7 @@ pip install -e .
 
 ## 研究基础
 
-Claude Rails 的设计不是拍脑袋，每个核心决策都有依据：
+Claude H-H 的设计不是拍脑袋，每个核心决策都有依据：
 
 - **Harness Engineering** (Mitchell Hashimoto, 2026) — environment > model
 - **Self-Spec** (ICLR 2026) — 规格优先提升通过率 2-5%

@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "claude-rails"
+name = "claude-hh"
 version = "0.1.0"
 description = "Rails for Claude Code — spec-first AI coding with hook-enforced quality gates. Turn 50% accuracy into 80%+."
 readme = "README.md"
@@ -56,10 +56,10 @@ dev = [
 harness = "harness.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/penguinliao/claude-rails"
-Repository = "https://github.com/penguinliao/claude-rails"
-Issues = "https://github.com/penguinliao/claude-rails/issues"
-Documentation = "https://github.com/penguinliao/claude-rails#readme"
+Homepage = "https://github.com/penguinliao/claude-hh"
+Repository = "https://github.com/penguinliao/claude-hh"
+Issues = "https://github.com/penguinliao/claude-hh/issues"
+Documentation = "https://github.com/penguinliao/claude-hh#readme"
 
 [tool.setuptools.packages.find]
 include = ["harness*"]
