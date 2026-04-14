@@ -489,15 +489,39 @@ def advance(project_root: str, note: str = "") -> AdvanceResult:
                     )
                 print("[harness] ✅ Gate 3: 浊龙验收报告已确认")
 
-            # AC awareness — log for reference, don't enforce count match.
-            # One test script can cover multiple ACs. The real gate is
-            # Gate 1+2 (scripts exist AND exit 0), not script count.
-            from harness.spec_file import find_spec, extract_acceptance_criteria
+            # Gate 4: test scripts must reference spec's affected files.
+            # Prevents empty "print('ok')" scripts that test nothing.
+            # Physical check: read script source, look for import/open of affected files.
+            from harness.spec_file import find_spec, extract_affected_files, extract_acceptance_criteria
             spec_path = find_spec(project_root)
             if spec_path:
+                affected = extract_affected_files(spec_path)
                 ac_list = extract_acceptance_criteria(spec_path)
                 if ac_list:
                     print(f"[harness] 📋 spec有{len(ac_list)}条AC，{len(test_scripts)}个测试脚本覆盖")
+                if affected:
+                    affected_stems = {os.path.splitext(os.path.basename(f))[0] for f in affected}
+                    scripts_referencing = 0
+                    for script in test_scripts:
+                        try:
+                            src = open(script, encoding="utf-8").read()
+                            if any(stem in src for stem in affected_stems if stem):
+                                scripts_referencing += 1
+                        except OSError:
+                            pass
+                    if scripts_referencing == 0 and len(affected_stems) > 0:
+                        fail_reason = (
+                            f"测试脚本未引用spec影响文件中的任何模块。\n"
+                            f"spec影响文件：{', '.join(list(affected_stems)[:5])}\n"
+                            f"测试脚本必须 import 或引用被测模块，不能是空脚本。"
+                        )
+                        state.history.append(StageEntry(
+                            stage=current, status="FAIL",
+                            timestamp=datetime.now().isoformat(),
+                            note=fail_reason,
+                        ))
+                        _save_state(project_root, state)
+                        return AdvanceResult(ok=False, reason=fail_reason)
 
     # Find next stage in route
     try:
