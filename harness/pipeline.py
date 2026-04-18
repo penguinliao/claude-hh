@@ -311,19 +311,30 @@ def advance(project_root: str, note: str = "") -> AdvanceResult:
 
     current = state.current_stage
 
-    # v3.5: Advance cooldown — prevent rapid-fire advancing through stages
+    # v3.6: Advance cooldown — only fires when the LAST history entry is a FAIL
+    # within 30s. Normal linear progression (PASS -> advance to next stage) or
+    # any constructive progress after a FAIL (retreat writes FAIL then new
+    # IN_PROGRESS) no longer hits cooldown. Intent: prevent rapid-fire retry
+    # after failure, not slow down successful advancement.
     if state.risk_level != "micro" and state.history:
-        last_ts = state.history[-1].timestamp
-        try:
-            elapsed = (datetime.now() - datetime.fromisoformat(last_ts)).total_seconds()
-            if elapsed < 30:
-                return AdvanceResult(
-                    ok=False,
-                    reason=f"advance冷却中（距上次{elapsed:.0f}秒，需等待{30-elapsed:.0f}秒）。"
-                           f"非micro路由每次advance间隔至少30秒。",
-                )
-        except (ValueError, TypeError):
-            pass  # 时间解析失败不阻塞
+        last_entry = state.history[-1]
+        if last_entry.status == "FAIL":
+            try:
+                elapsed = (
+                    datetime.now() - datetime.fromisoformat(last_entry.timestamp)
+                ).total_seconds()
+                if elapsed < 30:
+                    # v0.3.2 hotfix10: PM-friendly wording — tell them the
+                    # next action (retreat to IMPLEMENT and fix) rather than
+                    # blaming them for "blind retry".
+                    return AdvanceResult(
+                        ok=False,
+                        reason=f"刚刚 advance 失败过（{elapsed:.0f} 秒前），"
+                               f"再等 {30-elapsed:.0f} 秒可重试。"
+                               f"建议先 retreat 回 IMPLEMENT 修复代码，不要原地重试。",
+                    )
+            except (ValueError, TypeError):
+                pass  # unparseable timestamp -> fail-open
 
     # Validate exit criteria for current stage
     if current == 1:  # SPEC stage requires spec file
@@ -392,7 +403,8 @@ def advance(project_root: str, note: str = "") -> AdvanceResult:
                         fail_reason = (
                             f"REVIEW自动检查未通过（总分{report.total_score:.0f}/100）{blocked}\n"
                             f"未通过的维度:\n{detail_str}\n"
-                            f"请retreat回IMPLEMENT修复后重新审查。"
+                            f"📖 详细问题见 .harness/review.md\n"
+                            f"下一步：retreat 回 IMPLEMENT 修复 → advance 重审。"
                         )
                         state.history.append(StageEntry(
                             stage=current, status="FAIL",
@@ -455,9 +467,30 @@ def advance(project_root: str, note: str = "") -> AdvanceResult:
                            "脚本要求：exit 0 表示通过，非零表示失败。",
                 )
 
-            # Gate 2: harness executes each test script, checks exit code
-            failed_scripts: list[str] = []
-            for script in test_scripts:
+            # Gate 2: harness executes each test script, checks exit code.
+            # v0.3.2 hotfix7: run scripts in parallel and stream live per-script
+            # progress. Previously serial → a project with 24 test scripts could
+            # take N*120s worst-case with no visible progress, leading PMs to
+            # assume the pipeline had hung.
+            # Concurrency is configurable via HARNESS_TEST_WORKERS (default 2).
+            # Default is deliberately conservative: some legacy tests share
+            # /tmp markers keyed on project_root hash and can race when many
+            # concurrent subprocesses touch them. 2 workers still delivers ~2×
+            # speedup while keeping the collision surface low. Projects with
+            # fully isolated tests can bump: HARNESS_TEST_WORKERS=4.
+            # Retry semantics: scripts that fail under contention are rerun
+            # serially at the end before being reported as a final FAIL.
+            import concurrent.futures as _cf
+
+            try:
+                _max_workers = max(1, int(os.environ.get("HARNESS_TEST_WORKERS", "2")))
+            except ValueError:
+                _max_workers = 2
+
+            total = len(test_scripts)
+
+            def _run_one(script: str) -> tuple[str, Optional[str]]:
+                script_name = os.path.basename(script)
                 try:
                     result = _sp.run(
                         ["python3", script],
@@ -467,13 +500,44 @@ def advance(project_root: str, note: str = "") -> AdvanceResult:
                         timeout=120,
                     )
                     if result.returncode != 0:
-                        script_name = os.path.basename(script)
                         stderr_tail = (result.stderr or "")[-500:]
-                        failed_scripts.append(f"{script_name} (exit {result.returncode}): {stderr_tail}")
+                        return script_name, f"{script_name} (exit {result.returncode}): {stderr_tail}"
+                    return script_name, None
                 except _sp.TimeoutExpired:
-                    failed_scripts.append(f"{os.path.basename(script)} (timeout 120s)")
+                    return script_name, f"{script_name} (timeout 120s)"
                 except Exception as exc:
-                    failed_scripts.append(f"{os.path.basename(script)} (error: {exc})")
+                    return script_name, f"{script_name} (error: {exc})"
+
+            raced_scripts: list[str] = []
+            raced_errors: dict[str, str] = {}
+            done_count = 0
+            with _cf.ThreadPoolExecutor(max_workers=_max_workers) as _pool:
+                future_map = {_pool.submit(_run_one, s): s for s in test_scripts}
+                for fut in _cf.as_completed(future_map):
+                    try:
+                        script_name, err = fut.result()
+                    except Exception as exc:
+                        script_name = os.path.basename(future_map[fut])
+                        err = f"{script_name} (executor error: {exc})"
+                    done_count += 1
+                    if err is None:
+                        print(f"[harness] 🧪 [{done_count}/{total}] {script_name} ✅")
+                    else:
+                        print(f"[harness] 🧪 [{done_count}/{total}] {script_name} ❌ (will retry serially)")
+                        raced_scripts.append(future_map[fut])
+                        raced_errors[script_name] = err
+
+            # Serial retry pass — separates genuine failures from parallel races.
+            failed_scripts: list[str] = []
+            if raced_scripts:
+                print(f"[harness] 🔁 {len(raced_scripts)} script(s) failed under parallel load, retrying serially...")
+                for script in raced_scripts:
+                    script_name, err = _run_one(script)
+                    if err is None:
+                        print(f"[harness] 🔁 {script_name} ✅ (passed on retry — was a parallel race)")
+                    else:
+                        print(f"[harness] 🔁 {script_name} ❌ (genuine failure)")
+                        failed_scripts.append(err)
 
             if failed_scripts:
                 detail = "\n".join(failed_scripts[:5])
@@ -595,7 +659,8 @@ def advance(project_root: str, note: str = "") -> AdvanceResult:
         return AdvanceResult(
             ok=True, new_stage=current,
             new_stage_name=STAGE_NAMES.get(current, ""),
-            reason="Pipeline complete!",
+            reason="🎉 Pipeline 全部阶段已通过！代码已审查、测试已通过。"
+                   "可以安全停止 Claude 或开始部署。",
             completed=True,
         )
 
@@ -970,7 +1035,10 @@ if __name__ == "__main__":
         result = advance(project, note)
         if result.ok:
             if result.completed:
-                print("Pipeline complete!")
+                # v0.3.2 hotfix12: surface the reason field so the PM-facing
+                # celebration message from hotfix11 actually reaches the CLI
+                # (programmatic callers already saw it via AdvanceResult).
+                print(result.reason or "Pipeline complete!")
             else:
                 print(f"Advanced to Stage {result.new_stage} ({result.new_stage_name})")
         else:

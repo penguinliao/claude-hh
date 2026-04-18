@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 # Add harness to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -394,41 +395,56 @@ def handle(ctx: HookContext) -> HookResult:
     if not staged_files:
         return HookResult(exit_code=0)  # No code files staged
 
-    # 检测是否有 TS/Vue 文件，运行 tsc 类型检查
-    ts_files = [f for f in staged_files if Path(f).suffix.lower() in {".ts", ".tsx", ".vue"}]
-    if ts_files:
-        project_root = ctx.project_root or os.getcwd()
-        try:
-            tsc_result = subprocess.run(
-                ["npx", "tsc", "--noEmit"],
-                capture_output=True, text=True, timeout=30,
-                cwd=project_root
-            )
-            if tsc_result.returncode != 0:
-                errors = tsc_result.stdout.strip()[:500]
-                return HookResult(
-                    exit_code=2,
-                    message=f"[harness] ❌ TypeScript 类型检查失败:\n{errors}"
-                )
-        except subprocess.TimeoutExpired:
-            print("[harness] ⚠️ tsc --noEmit 超时(30s)，跳过类型检查")
-        except FileNotFoundError:
-            print("[harness] ⚠️ npx/tsc 不可用，跳过类型检查")
+    # v0.3.2 hotfix8: run tsc and check_standard in parallel instead of
+    # serially. Previously a TS project paid 30s (tsc) + 30s (check_standard)
+    # worst-case = 60s per commit. Both checks are independent and can share
+    # worker threads without contention.
+    import concurrent.futures as _cf
 
-    # Make paths absolute
+    ts_files = [f for f in staged_files if Path(f).suffix.lower() in {".ts", ".tsx", ".vue"}]
     root = ctx.project_root or os.getcwd()
     abs_files = [
         os.path.join(root, f) if not os.path.isabs(f) else f
         for f in staged_files
     ]
 
-    # Find spec for validation
-    from harness.spec_file import find_spec
-    spec_path = find_spec(root)
-
-    # Run standard check
     from harness.runner import check_standard
-    report = check_standard(abs_files, test_cmd=None)
+
+    def _run_tsc() -> tuple[Optional[int], str]:
+        """Return (exit_code, message). exit_code=None means skipped."""
+        if not ts_files:
+            return None, ""
+        try:
+            tsc_result = subprocess.run(
+                ["npx", "tsc", "--noEmit"],
+                capture_output=True, text=True, timeout=30,
+                cwd=root,
+            )
+            if tsc_result.returncode != 0:
+                errors = tsc_result.stdout.strip()[:500]
+                return 2, f"TypeScript 类型检查失败:\n{errors}"
+            return 0, ""
+        except subprocess.TimeoutExpired:
+            return None, "tsc --noEmit 超时(30s)，跳过类型检查"
+        except FileNotFoundError:
+            return None, "npx/tsc 不可用，跳过类型检查"
+
+    def _run_check_standard():
+        return check_standard(abs_files, test_cmd=None)
+
+    with _cf.ThreadPoolExecutor(max_workers=2) as _pool:
+        tsc_future = _pool.submit(_run_tsc)
+        check_future = _pool.submit(_run_check_standard)
+        tsc_exit, tsc_msg = tsc_future.result()
+        report = check_future.result()
+
+    # tsc skipped messages surface only if benign
+    if tsc_exit is None and tsc_msg:
+        print(f"[harness] ⚠️ {tsc_msg}")
+
+    # tsc hard fail takes priority (keeps previous semantics: TS error blocks)
+    if tsc_exit == 2:
+        return HookResult(exit_code=2, message=f"[harness] ❌ {tsc_msg}")
 
     if report.passed:
         score = f"{report.total_score:.0f}分"

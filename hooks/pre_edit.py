@@ -111,7 +111,11 @@ def handle(ctx: HookContext) -> HookResult:
                     affected = extract_affected_files(spec_path)
                     if not affected:
                         return None  # Empty spec file list → pass
-                    norm = lambda p: os.path.normpath(p).replace(os.sep, "/")
+                    # v0.3.2 hotfix9: case-insensitive path compare.
+                    # macOS APFS is case-insensitive; spec.md may record
+                    # "Foo.py" while the file on disk is "foo.py", which
+                    # previously false-rejected legitimate edits.
+                    norm = lambda p: os.path.normpath(p).replace(os.sep, "/").lower()
                     rel_path = os.path.relpath(file_path, project_root)
                     if not any(norm(rel_path) == norm(af) for af in affected):
                         _bname = os.path.basename(file_path)
