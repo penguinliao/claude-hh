@@ -213,6 +213,36 @@ def _classify_command(cmd: str) -> tuple[str, str]:
         # No keyword scanning needed — it blocks legitimate operations like
         # writing test scripts or reading logs.
 
+    # R1d: python3 - << EOF heredoc — Sonnet 用过的 bypass 形式
+    # 匹配 python3 - <<[-] [quote]MARKER[quote] ... MARKER 结构，
+    # 提取 heredoc body 后扫描代码文件写入 / 远程操作 / DB mutation 等关键词。
+    _heredoc_match = re.search(
+        r'python3?\s+-\s*<<-?\s*[\'"]?(\w+)[\'"]?\s*\n([\s\S]*?)\n\1\b',
+        cmd,
+    )
+    if _heredoc_match:
+        _hd_body = _heredoc_match.group(2)
+        # Remote ops
+        if re.search(r'\bssh\b|\bscp\b|\bos\.system\b|\bsubprocess\b|\bPopen\b', _hd_body):
+            return ("deploy_ssh", "Heredoc Python脚本中的远程操作")
+        # Code file writes — open(*, "w") / open(*, "a") / Path(*).write_text
+        # Must check write mode to avoid blocking read-only diagnostic scripts
+        # Pattern catches: open("x.py","w"), open('x.py', 'w'), open(p, mode='w')
+        _code_re = re.compile(
+            r'\bopen\s*\([^)]*\.(?:py|ts|tsx|js|jsx|vue)[^)]*[\'"]\s*[wax]',
+            re.DOTALL,
+        )
+        _writetext_re = re.compile(
+            r'\.write_text\s*\(|\bPath\s*\([^)]*\.(?:py|ts|tsx|js|jsx|vue)[^)]*\)\s*\.write_text',
+            re.DOTALL,
+        )
+        if _code_re.search(_hd_body) or _writetext_re.search(_hd_body):
+            return ("code_file_write", "Heredoc Python脚本中直接写入代码文件")
+        # DB mutations
+        for pat, label in _DB_PATTERNS:
+            if re.search(pat, _hd_body, re.IGNORECASE):
+                return ("db_mutation", f"Heredoc Python脚本中的{label}")
+
     # R1c: Split chain commands (;  &&  ||) and classify each part
     # Fix: exclude bare `&` (e.g. `2>&1` redirects) to avoid infinite recursion
     if re.search(r';|&&|\|\|', cmd):

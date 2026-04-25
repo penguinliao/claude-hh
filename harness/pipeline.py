@@ -705,6 +705,22 @@ def is_code_write_allowed(project_root: str, file_path: str = "") -> tuple[bool,
         if ext not in _CODE_EXTENSIONS:
             return True, ""  # Non-code files (md, json, yaml, etc.) always allowed
 
+    # v0.3.4: External-path boundary check.
+    # The hook protects this project (project_root) only. If file_path is
+    # outside the project_root subtree (e.g. /tmp/, sibling project dirs),
+    # the hook should not interfere — it's not our project to protect.
+    # macOS APFS is case-insensitive, so compare via lower().
+    if file_path and project_root:
+        try:
+            _abs_file = os.path.abspath(file_path)
+            _abs_root = os.path.abspath(project_root)
+            # Add trailing sep so /a/b doesn't match /a/bcd as "inside"
+            _root_with_sep = _abs_root.rstrip(os.sep) + os.sep
+            if not _abs_file.lower().startswith(_root_with_sep.lower()):
+                return True, "External path (outside project_root); hook does not protect."
+        except (ValueError, OSError):
+            pass  # Fail-open on path resolution error
+
     # harness-engineering eats its own dogfood: no pipeline stage exemption.
     # Only spec scope check has a self-edit exemption (in pre_edit.py) to avoid
     # circular dependency (harness can't list itself in its own spec).

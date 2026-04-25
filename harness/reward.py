@@ -22,6 +22,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+# Ruff S-rule codes and bandit test IDs to skip — aligned with pyproject.toml
+# (ignore = ["E501", "S101", "S603", "S607"]).
+# S101/B101=assert_used; S603/B603=subprocess_without_shell; S607/B607=start_process_partial_path.
+# These are stylistic conventions, not real security holes.
+_RUFF_S_IGNORE: frozenset[str] = frozenset({"S101", "S603", "S607"})
+_BANDIT_IGNORE: frozenset[str] = frozenset({"B101", "B603", "B607"})
+
+
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -234,23 +242,36 @@ def score_security(files: list[str]) -> DimensionResult:
             result = _run_tool(["ruff", "check", "--select=S", "--output-format=json", "--no-fix", *py_files])
             ruff_output = result.stdout.strip()
             ruff_count = 0
+            ruff_filtered = 0
             if ruff_output:
                 try:
                     ruff_json = _json.loads(ruff_output)
                     for item in ruff_json:
+                        code = item.get("code", "")
+                        if code in _RUFF_S_IGNORE:
+                            ruff_filtered += 1
+                            continue
                         loc_file = item.get("filename", "")
                         loc_line = item.get("location", {}).get("row", 0)
                         if _add_unique_issue(loc_file, loc_line):
                             ruff_count += 1
                     issue_count += ruff_count
-                    issues.append(f"ruff S-rules: {ruff_count} issue(s)")
+                    filter_note = (
+                        f" ({ruff_filtered} filtered: S101/S603/S607)"
+                        if ruff_filtered > 0
+                        else ""
+                    )
+                    issues.append(f"ruff S-rules: {ruff_count} issue(s){filter_note}")
                 except _json.JSONDecodeError:
-                    # Fallback: count lines from concise output
+                    # Fallback: count lines from concise output, filter ignored codes
                     fallback = _run_tool(["ruff", "check", "--select=S", "--output-format=concise", "--no-fix", *py_files])
-                    lines = fallback.stdout.strip().splitlines()
+                    lines = [
+                        ln for ln in fallback.stdout.strip().splitlines()
+                        if not any(code in ln for code in _RUFF_S_IGNORE)
+                    ]
                     issue_count += len(lines)
                     ruff_count = len(lines)
-                    issues.append(f"ruff S-rules: {ruff_count} issue(s) (fallback)")
+                    issues.append(f"ruff S-rules: {ruff_count} issue(s) (fallback, filtered S101/S603/S607)")
             if ruff_count > 0:
                 # Also get concise output for human-readable details
                 concise = _run_tool(["ruff", "check", "--select=S", "--output-format=concise", "--no-fix", *py_files])
@@ -267,27 +288,45 @@ def score_security(files: list[str]) -> DimensionResult:
             bandit_output = result.stdout.strip()
             bandit_count = 0
             bandit_total = 0
+            bandit_filtered = 0
             if bandit_output:
                 try:
                     bandit_json = _json.loads(bandit_output)
                     bandit_results = bandit_json.get("results", [])
                     bandit_total = len(bandit_results)
                     for item in bandit_results:
+                        test_id = item.get("test_id", "")
+                        if test_id in _BANDIT_IGNORE:
+                            bandit_filtered += 1
+                            continue
                         loc_file = item.get("filename", "")
                         loc_line = item.get("line_number", 0)
                         if _add_unique_issue(loc_file, loc_line):
                             bandit_count += 1
-                    deduplicated = bandit_total - bandit_count
+                    deduplicated = bandit_total - bandit_count - bandit_filtered
                     issue_count += bandit_count
-                    issues.append(f"bandit: {bandit_count} unique issue(s) ({deduplicated} deduplicated from {bandit_total} total)")
+                    filter_note = (
+                        f", {bandit_filtered} filtered (B101/B603/B607)"
+                        if bandit_filtered > 0
+                        else ""
+                    )
+                    issues.append(
+                        f"bandit: {bandit_count} unique issue(s) "
+                        f"({deduplicated} deduplicated from {bandit_total} total{filter_note})"
+                    )
                 except _json.JSONDecodeError:
-                    # Fallback: text format
+                    # Fallback: text format — also filter B101/B603/B607
                     fallback = _run_tool(["bandit", "-r", "--format=text", "-q", *py_files])
                     fb_output = (fallback.stdout + fallback.stderr).strip()
-                    bandit_lines = [ln for ln in fb_output.splitlines() if ln.strip().startswith(">>") or "Issue:" in ln]
+                    bandit_lines = []
+                    for ln in fb_output.splitlines():
+                        if ln.strip().startswith(">>") or "Issue:" in ln:
+                            if any(rule in ln for rule in _BANDIT_IGNORE):
+                                continue
+                            bandit_lines.append(ln)
                     issue_count += len(bandit_lines)
                     bandit_count = len(bandit_lines)
-                    issues.append(f"bandit: {bandit_count} issue(s) (fallback, no dedup)")
+                    issues.append(f"bandit: {bandit_count} issue(s) (fallback, filtered B101/B603/B607)")
             if bandit_count > 0:
                 # Get text output for details
                 text_result = _run_tool(["bandit", "-r", "--format=text", "-q", *py_files])
